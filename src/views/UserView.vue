@@ -2,27 +2,22 @@
   <div>
     <el-form :inline="true" :model="query" class="query-form">
       <el-form-item label="用户名">
-        <el-input v-model="query.keyword" placeholder="输入用户名" clearable></el-input>
+        <el-input v-model="query.keyword" placeholder="用户名关键词" clearable></el-input>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" icon="el-icon-search" @click="handleQuery">查询</el-button>
-        <el-button @click="resetQuery">重置</el-button>
-      </el-form-item>
-      <el-form-item class="add-btn">
-        <el-button type="success" icon="el-icon-plus" @click="openAdd">新增用户</el-button>
+        <el-button type="primary" icon="el-icon-search" @click="handleQuery">查询用户</el-button>
+        <el-button type="success" icon="el-icon-plus" @click="openAdd">添加用户</el-button>
       </el-form-item>
     </el-form>
 
     <el-table :data="pagedList" border stripe>
-      <el-table-column prop="id" label="编号" width="70"></el-table-column>
-      <el-table-column prop="name" label="用户名" width="140"></el-table-column>
-      <el-table-column prop="email" label="邮箱" min-width="200"></el-table-column>
-      <el-table-column prop="role" label="角色" width="120"></el-table-column>
-      <el-table-column prop="date" label="注册时间" width="140"></el-table-column>
-      <el-table-column label="操作" width="120" fixed="right">
+      <el-table-column prop="date" label="日期" width="160"></el-table-column>
+      <el-table-column prop="name" label="用户名" width="160"></el-table-column>
+      <el-table-column prop="password" label="密码" min-width="160"></el-table-column>
+      <el-table-column label="操作" width="160">
         <template slot-scope="scope">
-          <el-button type="text" size="mini" @click="openEdit(scope.row)">编辑</el-button>
-          <el-button type="text" size="mini" class="danger-text" @click="handleDelete(scope.row)">删除</el-button>
+          <el-button size="mini" @click="openEdit(scope.row)">编辑</el-button>
+          <el-button type="danger" size="mini" @click="handleDelete(scope.row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -38,18 +33,13 @@
       :total="filteredList.length">
     </el-pagination>
 
-    <el-dialog :title="dialogTitle" :visible.sync="dialogVisible" width="480px">
+    <el-dialog :title="dialogTitle" :visible.sync="dialogVisible" width="440px">
       <el-form :model="form" :rules="rules" ref="userForm" label-width="80px">
         <el-form-item label="用户名" prop="name">
           <el-input v-model="form.name"></el-input>
         </el-form-item>
-        <el-form-item label="邮箱" prop="email">
-          <el-input v-model="form.email"></el-input>
-        </el-form-item>
-        <el-form-item label="角色" prop="role">
-          <el-select v-model="form.role">
-            <el-option v-for="item in roles" :key="item" :label="item" :value="item"></el-option>
-          </el-select>
+        <el-form-item label="密码" prop="password">
+          <el-input v-model="form.password"></el-input>
         </el-form-item>
       </el-form>
 
@@ -63,20 +53,19 @@
 
 <script>
 const initList = [
-  { id: 1, name: 'lingrui0202', email: '3433246675@qq.com', role: '管理员', date: '2026-09-20' },
-  { id: 2, name: 'zhangsan', email: 'zhangsan@example.com', role: '普通用户', date: '2026-09-25' },
-  { id: 3, name: 'lisi', email: 'lisi@example.com', role: '普通用户', date: '2026-10-02' },
-  { id: 4, name: 'wangwu', email: 'wangwu@example.com', role: '普通用户', date: '2026-10-08' },
-  { id: 5, name: 'zhaoliu', email: 'zhaoliu@example.com', role: '普通用户', date: '2026-10-12' },
-  { id: 6, name: 'sunqi', email: 'sunqi@example.com', role: '普通用户', date: '2026-10-15' }
+  { id: 1, date: '2016-05-02', name: '吴小诚', password: '123456' },
+  { id: 2, date: '2016-05-04', name: '王小虎', password: '123456' },
+  { id: 3, date: '2016-05-06', name: '李小明', password: '888888' },
+  { id: 4, date: '2016-05-08', name: '赵小刚', password: '666666' },
+  { id: 5, date: '2016-05-10', name: '孙小丽', password: '000000' },
+  { id: 6, date: '2016-05-12', name: '周小强', password: '111111' }
 ]
 
 function emptyForm() {
   return {
     id: null,
     name: '',
-    email: '',
-    role: '普通用户'
+    password: ''
   }
 }
 
@@ -84,7 +73,6 @@ export default {
   name: 'UserView',
   data() {
     return {
-      roles: ['管理员', '普通用户'],
       list: initList,
       query: {
         keyword: ''
@@ -92,13 +80,13 @@ export default {
       page: 1,
       size: 5,
       dialogVisible: false,
-      dialogTitle: '新增用户',
+      dialogTitle: '添加用户',
       form: emptyForm(),
       rules: {
         name: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-        email: [
-          { required: true, message: '请输入邮箱', trigger: 'blur' },
-          { type: 'email', message: '邮箱格式不对', trigger: 'blur' }
+        password: [
+          { required: true, message: '请输入密码', trigger: 'blur' },
+          { min: 6, max: 12, message: '密码 6 到 12 位', trigger: 'blur' }
         ]
       }
     }
@@ -122,10 +110,6 @@ export default {
     handleQuery() {
       this.page = 1
     },
-    resetQuery() {
-      this.query.keyword = ''
-      this.page = 1
-    },
     handleSizeChange(val) {
       this.size = val
       this.page = 1
@@ -134,7 +118,7 @@ export default {
       this.page = val
     },
     openAdd() {
-      this.dialogTitle = '新增用户'
+      this.dialogTitle = '添加用户'
       this.form = emptyForm()
       this.dialogVisible = true
       this.$nextTick(() => {
@@ -163,7 +147,7 @@ export default {
           const id = this.list.length ? this.list[this.list.length - 1].id + 1 : 1
           const date = new Date().toISOString().slice(0, 10)
           this.list.push(Object.assign({}, this.form, { id, date }))
-          this.$message.success('新增成功')
+          this.$message.success('添加成功')
         }
 
         this.dialogVisible = false
@@ -186,16 +170,8 @@ export default {
   padding-top: 18px;
 }
 
-.add-btn {
-  float: right;
-}
-
 .pager {
   margin-top: 16px;
   text-align: right;
-}
-
-.danger-text {
-  color: #f56c6c;
 }
 </style>

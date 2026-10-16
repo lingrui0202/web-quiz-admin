@@ -1,19 +1,16 @@
 <template>
   <el-container class="layout">
-    <el-header class="layout-header">Quiz 后台管理</el-header>
+    <el-header class="layout-header">
+      <i class="el-icon-message"></i>
+      系统信息管理
+    </el-header>
 
     <el-container>
       <el-aside width="200px" class="layout-aside">
-        <el-menu :default-active="$route.path" router>
-          <el-menu-item index="/question">
-            <i class="el-icon-edit-outline"></i>
-            <span>题目管理</span>
-          </el-menu-item>
-          <el-menu-item index="/user">
-            <i class="el-icon-user"></i>
-            <span>用户管理</span>
-          </el-menu-item>
-        </el-menu>
+        <div class="menu">
+          <router-link to="/user" class="menu-item" active-class="active">用户管理</router-link>
+          <router-link to="/question" class="menu-item" active-class="active">题目管理</router-link>
+        </div>
       </el-aside>
 
       <el-main class="layout-main">
@@ -47,6 +44,21 @@ body {
 
 .layout-aside {
   border-right: 1px solid #dcdfe6;
+}
+
+.menu {
+  padding-top: 16px;
+}
+
+.menu-item {
+  display: block;
+  padding: 10px 20px;
+  font-size: 15px;
+}
+
+.menu-item.active {
+  color: #409eff;
+  font-weight: bold;
 }
 
 .layout-main {

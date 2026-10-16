@@ -1,30 +1,19 @@
 <template>
   <div>
-    <!-- 顶部查询表单 -->
     <el-form :inline="true" :model="query" class="query-form">
-      <el-form-item label="题干">
-        <el-input v-model="query.keyword" placeholder="输入关键词" clearable></el-input>
-      </el-form-item>
-      <el-form-item label="分类">
-        <el-select v-model="query.category" placeholder="全部分类" clearable>
-          <el-option v-for="item in categories" :key="item" :label="item" :value="item"></el-option>
-        </el-select>
+      <el-form-item label="题目">
+        <el-input v-model="query.keyword" placeholder="题目关键词" clearable></el-input>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" icon="el-icon-search" @click="handleQuery">查询</el-button>
-        <el-button @click="resetQuery">重置</el-button>
-      </el-form-item>
-      <el-form-item class="add-btn">
-        <el-button type="success" icon="el-icon-plus" @click="openAdd">新增题目</el-button>
+        <el-button type="success" icon="el-icon-search" @click="handleQuery">查询题目</el-button>
+        <el-button type="success" icon="el-icon-plus" @click="openAdd">添加题目</el-button>
       </el-form-item>
     </el-form>
 
-    <!-- 题目表格 -->
     <el-table :data="pagedList" border stripe>
-      <el-table-column prop="id" label="编号" width="70"></el-table-column>
-      <el-table-column prop="category" label="分类" width="130"></el-table-column>
-      <el-table-column prop="title" label="题干" min-width="240"></el-table-column>
-      <el-table-column label="选项" min-width="200">
+      <el-table-column prop="id" label="序号" width="70"></el-table-column>
+      <el-table-column prop="title" label="问题" min-width="240"></el-table-column>
+      <el-table-column label="选项" min-width="220">
         <template slot-scope="scope">
           <div v-for="(item, index) in scope.row.options" :key="index">
             {{ labels[index] }}. {{ item }}
@@ -34,15 +23,14 @@
       <el-table-column label="答案" width="70">
         <template slot-scope="scope">{{ labels[scope.row.answer] }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="120" fixed="right">
+      <el-table-column label="操作" width="160">
         <template slot-scope="scope">
-          <el-button type="text" size="mini" @click="openEdit(scope.row)">编辑</el-button>
-          <el-button type="text" size="mini" class="danger-text" @click="handleDelete(scope.row)">删除</el-button>
+          <el-button size="mini" @click="openEdit(scope.row)">编辑</el-button>
+          <el-button type="danger" size="mini" @click="handleDelete(scope.row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <!-- 分页 -->
     <el-pagination
       class="pager"
       @size-change="handleSizeChange"
@@ -54,16 +42,10 @@
       :total="filteredList.length">
     </el-pagination>
 
-    <!-- 新增 / 编辑题目的对话框 -->
     <el-dialog :title="dialogTitle" :visible.sync="dialogVisible" width="560px">
       <el-form :model="form" :rules="rules" ref="questionForm" label-width="80px">
-        <el-form-item label="分类" prop="category">
-          <el-select v-model="form.category">
-            <el-option v-for="item in categories" :key="item" :label="item" :value="item"></el-option>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="题干" prop="title">
-          <el-input v-model="form.title" placeholder="请输入题目"></el-input>
+        <el-form-item label="问题" prop="title">
+          <el-input v-model="form.title" placeholder="请输入问题"></el-input>
         </el-form-item>
         <el-form-item
           v-for="(item, index) in form.options"
@@ -73,7 +55,7 @@
           :rules="{ required: true, message: '选项不能为空', trigger: 'blur' }">
           <el-input v-model="form.options[index]"></el-input>
         </el-form-item>
-        <el-form-item label="正确答案">
+        <el-form-item label="答案">
           <el-radio-group v-model="form.answer">
             <el-radio v-for="(item, index) in labels" :key="item" :label="index">{{ item }}</el-radio>
           </el-radio-group>
@@ -93,56 +75,48 @@
 const initList = [
   {
     id: 1,
-    category: 'HTML BASICS',
     title: '在 HTML 中，哪个标签用于创建最大的标题？',
     options: ['<heading>', '<h6>', '<h1>', '<title>'],
     answer: 2
   },
   {
     id: 2,
-    category: 'HTML BASICS',
     title: '哪个属性可以为图片提供替代文本？',
     options: ['src', 'alt', 'href', 'title'],
     answer: 1
   },
   {
     id: 3,
-    category: 'CSS BASICS',
     title: '哪个 CSS 属性用于改变文字颜色？',
     options: ['font-style', 'text-decoration', 'color', 'background'],
     answer: 2
   },
   {
     id: 4,
-    category: 'CSS BASICS',
     title: '使用 Flexbox 时，哪个属性可以控制主轴方向？',
     options: ['align-items', 'flex-direction', 'justify-content', 'flex-wrap'],
     answer: 1
   },
   {
     id: 5,
-    category: 'CSS BASICS',
     title: '哪个单位相对于根元素的字体大小？',
     options: ['px', 'em', 'rem', '%'],
     answer: 2
   },
   {
     id: 6,
-    category: 'JAVASCRIPT',
     title: '使用哪个关键字可以声明一个不会重新赋值的变量？',
     options: ['var', 'let', 'const', 'static'],
     answer: 2
   },
   {
     id: 7,
-    category: 'JAVASCRIPT',
     title: '哪个方法可以把字符串转换成整数？',
     options: ['parseInt()', 'toString()', 'parseFloat()', 'Number.isInteger()'],
     answer: 0
   },
   {
     id: 8,
-    category: 'JAVASCRIPT',
     title: '哪个 DOM 方法可以根据 id 获取元素？',
     options: ['querySelectorAll()', 'getElementById()', 'getElementsByClassName()', 'createElement()'],
     answer: 1
@@ -152,7 +126,6 @@ const initList = [
 function emptyForm() {
   return {
     id: null,
-    category: 'HTML BASICS',
     title: '',
     options: ['', '', '', ''],
     answer: 0
@@ -164,33 +137,30 @@ export default {
   data() {
     return {
       labels: ['A', 'B', 'C', 'D'],
-      categories: ['HTML BASICS', 'CSS BASICS', 'JAVASCRIPT'],
       list: initList,
       query: {
-        keyword: '',
-        category: ''
+        keyword: ''
       },
       page: 1,
       size: 5,
       dialogVisible: false,
-      dialogTitle: '新增题目',
+      dialogTitle: '添加题目',
       form: emptyForm(),
       rules: {
-        title: [{ required: true, message: '请输入题干', trigger: 'blur' }]
+        title: [{ required: true, message: '请输入问题', trigger: 'blur' }]
       }
     }
   },
   computed: {
-    // 按题干关键词和分类过滤
+    // 按问题关键词过滤
     filteredList() {
       const keyword = this.query.keyword.trim().toLowerCase()
-      const category = this.query.category
 
-      return this.list.filter(item => {
-        const matchKeyword = !keyword || item.title.toLowerCase().indexOf(keyword) !== -1
-        const matchCategory = !category || item.category === category
-        return matchKeyword && matchCategory
-      })
+      if (!keyword) {
+        return this.list
+      }
+
+      return this.list.filter(item => item.title.toLowerCase().indexOf(keyword) !== -1)
     },
     // 当前页要显示的题目
     pagedList() {
@@ -202,11 +172,6 @@ export default {
     handleQuery() {
       this.page = 1
     },
-    resetQuery() {
-      this.query.keyword = ''
-      this.query.category = ''
-      this.page = 1
-    },
     handleSizeChange(val) {
       this.size = val
       this.page = 1
@@ -215,7 +180,7 @@ export default {
       this.page = val
     },
     openAdd() {
-      this.dialogTitle = '新增题目'
+      this.dialogTitle = '添加题目'
       this.form = emptyForm()
       this.dialogVisible = true
       this.$nextTick(() => {
@@ -244,7 +209,7 @@ export default {
         } else {
           const id = this.list.length ? this.list[this.list.length - 1].id + 1 : 1
           this.list.push(Object.assign({}, this.form, { id }))
-          this.$message.success('新增成功')
+          this.$message.success('添加成功')
         }
 
         this.dialogVisible = false
@@ -267,16 +232,8 @@ export default {
   padding-top: 18px;
 }
 
-.add-btn {
-  float: right;
-}
-
 .pager {
   margin-top: 16px;
   text-align: right;
-}
-
-.danger-text {
-  color: #f56c6c;
 }
 </style>
