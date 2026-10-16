@@ -1,6 +1,7 @@
 .DS_Store
 node_modules
-# dist 需要提交：Vercel 部署的是编译后的文件
+/dist
+# dist 单独推到 web-quiz-admin-dist 仓库，源码仓库不再包含
 
 
 # local env files
