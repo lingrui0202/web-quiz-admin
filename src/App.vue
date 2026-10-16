@@ -7,10 +7,22 @@
 
     <el-container>
       <el-aside width="200px" class="layout-aside">
-        <div class="menu">
-          <router-link to="/user" class="menu-item" active-class="active">用户管理</router-link>
-          <router-link to="/question" class="menu-item" active-class="active">题目管理</router-link>
-        </div>
+        <el-menu
+          :default-active="$route.path"
+          router
+          class="menu"
+          background-color="#ffffff"
+          text-color="#5a5f66"
+          active-text-color="#409eff">
+          <el-menu-item index="/user">
+            <i class="el-icon-user"></i>
+            <span slot="title">用户管理</span>
+          </el-menu-item>
+          <el-menu-item index="/question">
+            <i class="el-icon-edit-outline"></i>
+            <span slot="title">题目管理</span>
+          </el-menu-item>
+        </el-menu>
       </el-aside>
 
       <el-main class="layout-main">
@@ -43,25 +55,41 @@ body {
 }
 
 .layout-aside {
-  border-right: 1px solid #dcdfe6;
+  background-color: #fff;
 }
 
-.menu {
-  padding-top: 16px;
+/* 去掉 el-menu 自带的右边框，用 aside 自己的分割线 */
+.layout-aside .el-menu {
+  border-right: none;
+  padding-top: 12px;
 }
 
-.menu-item {
-  display: block;
-  padding: 10px 20px;
+.layout-aside .el-menu-item {
+  height: 52px;
+  line-height: 52px;
   font-size: 15px;
+  margin: 4px 10px;
+  border-radius: 6px;
 }
 
-.menu-item.active {
-  color: #409eff;
+/* 选中项：浅蓝底 + 左侧蓝色竖条 */
+.layout-aside .el-menu-item.is-active {
+  background-color: #ecf5ff;
   font-weight: bold;
 }
 
+.layout-aside .el-menu-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 2px;
+  background-color: #409eff;
+}
+
 .layout-main {
-  background-color: #fff;
+  background-color: #f7f8fa;
 }
 </style>
