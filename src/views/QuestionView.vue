@@ -1,17 +1,29 @@
 <template>
   <div>
+    <el-alert
+      v-if="loadError"
+      :title="'连不上后端：' + loadError"
+      type="error"
+      :closable="false"
+      show-icon
+      class="load-error">
+      <div>确认 <code>quiz-java</code> 已经在 8081 跑起来，并且 MySQL 已启动。</div>
+    </el-alert>
+
     <el-form :inline="true" :model="query" class="query-form">
       <el-form-item label="题目">
-        <el-input v-model="query.keyword" placeholder="题目关键词" clearable></el-input>
+        <el-input v-model="query.keyword" placeholder="题目关键词" clearable @keyup.enter.native="handleQuery"></el-input>
       </el-form-item>
       <el-form-item>
         <el-button type="success" icon="el-icon-search" @click="handleQuery">查询题目</el-button>
         <el-button type="success" icon="el-icon-plus" @click="openAdd">添加题目</el-button>
+        <el-button icon="el-icon-refresh" @click="load">刷新</el-button>
       </el-form-item>
     </el-form>
 
-    <el-table :data="pagedList" border stripe>
+    <el-table v-loading="loading" :data="pagedList" border stripe>
       <el-table-column prop="id" label="序号" width="70"></el-table-column>
+      <el-table-column prop="category" label="分类" width="130"></el-table-column>
       <el-table-column prop="title" label="问题" min-width="240"></el-table-column>
       <el-table-column label="选项" min-width="220">
         <template slot-scope="scope">
@@ -39,11 +51,16 @@
       :page-sizes="[5, 10, 20]"
       :page-size="size"
       layout="total, sizes, prev, pager, next"
-      :total="filteredList.length">
+      :total="list.length">
     </el-pagination>
 
     <el-dialog :title="dialogTitle" :visible.sync="dialogVisible" width="560px">
       <el-form :model="form" :rules="rules" ref="questionForm" label-width="80px">
+        <el-form-item label="分类" prop="category">
+          <el-select v-model="form.category" placeholder="选择分类">
+            <el-option v-for="c in categories" :key="c" :label="c" :value="c"></el-option>
+          </el-select>
+        </el-form-item>
         <el-form-item label="问题" prop="title">
           <el-input v-model="form.title" placeholder="请输入问题"></el-input>
         </el-form-item>
@@ -64,68 +81,25 @@
 
       <span slot="footer">
         <el-button @click="dialogVisible = false">取 消</el-button>
-        <el-button type="primary" @click="submitForm">确 定</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitForm">确 定</el-button>
       </span>
     </el-dialog>
   </div>
 </template>
 
 <script>
-// 题目数据先用本地数组存着，跟 quiz-game 里的是同一批题
-const initList = [
-  {
-    id: 1,
-    title: '在 HTML 中，哪个标签用于创建最大的标题？',
-    options: ['<heading>', '<h6>', '<h1>', '<title>'],
-    answer: 2
-  },
-  {
-    id: 2,
-    title: '哪个属性可以为图片提供替代文本？',
-    options: ['src', 'alt', 'href', 'title'],
-    answer: 1
-  },
-  {
-    id: 3,
-    title: '哪个 CSS 属性用于改变文字颜色？',
-    options: ['font-style', 'text-decoration', 'color', 'background'],
-    answer: 2
-  },
-  {
-    id: 4,
-    title: '使用 Flexbox 时，哪个属性可以控制主轴方向？',
-    options: ['align-items', 'flex-direction', 'justify-content', 'flex-wrap'],
-    answer: 1
-  },
-  {
-    id: 5,
-    title: '哪个单位相对于根元素的字体大小？',
-    options: ['px', 'em', 'rem', '%'],
-    answer: 2
-  },
-  {
-    id: 6,
-    title: '使用哪个关键字可以声明一个不会重新赋值的变量？',
-    options: ['var', 'let', 'const', 'static'],
-    answer: 2
-  },
-  {
-    id: 7,
-    title: '哪个方法可以把字符串转换成整数？',
-    options: ['parseInt()', 'toString()', 'parseFloat()', 'Number.isInteger()'],
-    answer: 0
-  },
-  {
-    id: 8,
-    title: '哪个 DOM 方法可以根据 id 获取元素？',
-    options: ['querySelectorAll()', 'getElementById()', 'getElementsByClassName()', 'createElement()'],
-    answer: 1
-  }
-]
+import {
+  listQuestions,
+  createQuestion,
+  updateQuestion,
+  removeQuestion,
+  labelsOf
+} from '@/api/question'
 
 function emptyForm() {
   return {
     id: null,
+    category: 'HTML BASICS',
     title: '',
     options: ['', '', '', ''],
     answer: 0
@@ -136,8 +110,13 @@ export default {
   name: 'QuestionView',
   data() {
     return {
-      labels: ['A', 'B', 'C', 'D'],
-      list: initList,
+      labels: labelsOf(),
+      categories: ['HTML BASICS', 'CSS BASICS', 'JAVASCRIPT', 'VUE'],
+      // 数据来自 quiz-java 的 /api/questions，不再是本地数组
+      list: [],
+      loading: false,
+      submitting: false,
+      loadError: '',
       query: {
         keyword: ''
       },
@@ -147,30 +126,38 @@ export default {
       dialogTitle: '添加题目',
       form: emptyForm(),
       rules: {
+        category: [{ required: true, message: '请选择分类', trigger: 'change' }],
         title: [{ required: true, message: '请输入问题', trigger: 'blur' }]
       }
     }
   },
   computed: {
-    // 按问题关键词过滤
-    filteredList() {
-      const keyword = this.query.keyword.trim().toLowerCase()
-
-      if (!keyword) {
-        return this.list
-      }
-
-      return this.list.filter(item => item.title.toLowerCase().indexOf(keyword) !== -1)
-    },
-    // 当前页要显示的题目
+    // 分页在前端做；过滤交给后端（keyword 会走 MyBatis 的动态 SQL）
     pagedList() {
       const start = (this.page - 1) * this.size
-      return this.filteredList.slice(start, start + this.size)
+      return this.list.slice(start, start + this.size)
     }
   },
+  created() {
+    this.load()
+  },
   methods: {
+    async load() {
+      this.loading = true
+      this.loadError = ''
+      try {
+        const keyword = this.query.keyword.trim()
+        this.list = await listQuestions(keyword ? { keyword } : {})
+      } catch (e) {
+        this.loadError = e.message
+        this.list = []
+      } finally {
+        this.loading = false
+      }
+    },
     handleQuery() {
       this.page = 1
+      this.load()
     },
     handleSizeChange(val) {
       this.size = val
@@ -197,30 +184,40 @@ export default {
       })
     },
     submitForm() {
-      this.$refs.questionForm.validate(valid => {
+      this.$refs.questionForm.validate(async valid => {
         if (!valid) {
           return
         }
 
-        if (this.form.id) {
-          const index = this.list.findIndex(item => item.id === this.form.id)
-          this.list.splice(index, 1, JSON.parse(JSON.stringify(this.form)))
-          this.$message.success('修改成功')
-        } else {
-          const id = this.list.length ? this.list[this.list.length - 1].id + 1 : 1
-          this.list.push(Object.assign({}, this.form, { id }))
-          this.$message.success('添加成功')
+        this.submitting = true
+        try {
+          if (this.form.id) {
+            await updateQuestion(this.form.id, this.form)
+            this.$message.success('修改成功')
+          } else {
+            await createQuestion(this.form)
+            this.$message.success('添加成功')
+          }
+          this.dialogVisible = false
+          await this.load()
+        } catch (e) {
+          this.$message.error(e.message)
+        } finally {
+          this.submitting = false
         }
-
-        this.dialogVisible = false
       })
     },
     handleDelete(row) {
       this.$confirm('确定要删除这道题目吗？', '提示', {
         type: 'warning'
-      }).then(() => {
-        this.list = this.list.filter(item => item.id !== row.id)
-        this.$message.success('删除成功')
+      }).then(async () => {
+        try {
+          await removeQuestion(row.id)
+          this.$message.success('删除成功')
+          await this.load()
+        } catch (e) {
+          this.$message.error(e.message)
+        }
       }).catch(() => {})
     }
   }
@@ -235,5 +232,9 @@ export default {
 .pager {
   margin-top: 16px;
   text-align: right;
+}
+
+.load-error {
+  margin-top: 16px;
 }
 </style>

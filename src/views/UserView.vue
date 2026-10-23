@@ -1,19 +1,35 @@
 <template>
   <div>
+    <el-alert
+      v-if="loadError"
+      :title="'连不上后端：' + loadError"
+      type="error"
+      :closable="false"
+      show-icon
+      class="load-error">
+      <div>确认 <code>quiz-java</code> 已经在 8081 跑起来，并且 MySQL 已启动。</div>
+    </el-alert>
+
     <el-form :inline="true" :model="query" class="query-form">
       <el-form-item label="用户名">
-        <el-input v-model="query.keyword" placeholder="用户名关键词" clearable></el-input>
+        <el-input v-model="query.keyword" placeholder="用户名关键词" clearable @keyup.enter.native="handleQuery"></el-input>
       </el-form-item>
       <el-form-item>
         <el-button type="primary" icon="el-icon-search" @click="handleQuery">查询用户</el-button>
         <el-button type="success" icon="el-icon-plus" @click="openAdd">添加用户</el-button>
+        <el-button icon="el-icon-refresh" @click="load">刷新</el-button>
       </el-form-item>
     </el-form>
 
-    <el-table :data="pagedList" border stripe>
-      <el-table-column prop="date" label="日期" width="160"></el-table-column>
-      <el-table-column prop="name" label="用户名" width="160"></el-table-column>
-      <el-table-column prop="password" label="密码" min-width="160"></el-table-column>
+    <el-table v-loading="loading" :data="pagedList" border stripe>
+      <el-table-column prop="date" label="注册日期" width="160"></el-table-column>
+      <el-table-column prop="name" label="用户名" width="180"></el-table-column>
+      <el-table-column prop="email" label="邮箱" min-width="220"></el-table-column>
+      <el-table-column label="密码" width="120">
+        <template slot-scope="scope">
+          <el-tag size="mini" type="info">{{ scope.row.id ? '已加密' : '' }}</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="160">
         <template slot-scope="scope">
           <el-button size="mini" @click="openEdit(scope.row)">编辑</el-button>
@@ -39,33 +55,32 @@
           <el-input v-model="form.name"></el-input>
         </el-form-item>
         <el-form-item label="密码" prop="password">
-          <el-input v-model="form.password"></el-input>
+          <el-input
+            v-model="form.password"
+            :placeholder="form.id ? '留空表示不修改密码' : '至少 6 位'"></el-input>
+        </el-form-item>
+        <el-form-item label="邮箱">
+          <el-input v-model="form.email" placeholder="选填"></el-input>
         </el-form-item>
       </el-form>
 
       <span slot="footer">
         <el-button @click="dialogVisible = false">取 消</el-button>
-        <el-button type="primary" @click="submitForm">确 定</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitForm">确 定</el-button>
       </span>
     </el-dialog>
   </div>
 </template>
 
 <script>
-const initList = [
-  { id: 1, date: '2016-05-02', name: '吴小诚', password: '123456' },
-  { id: 2, date: '2016-05-04', name: '王小虎', password: '123456' },
-  { id: 3, date: '2016-05-06', name: '李小明', password: '888888' },
-  { id: 4, date: '2016-05-08', name: '赵小刚', password: '666666' },
-  { id: 5, date: '2016-05-10', name: '孙小丽', password: '000000' },
-  { id: 6, date: '2016-05-12', name: '周小强', password: '111111' }
-]
+import { listUsers, createUser, updateUser, removeUser } from '@/api/user'
 
 function emptyForm() {
   return {
     id: null,
     name: '',
-    password: ''
+    password: '',
+    email: ''
   }
 }
 
@@ -73,7 +88,11 @@ export default {
   name: 'UserView',
   data() {
     return {
-      list: initList,
+      // 数据来自 quiz-java 的 /api/users；密码永远不会返回，所以没有密码列可显示
+      list: [],
+      loading: false,
+      submitting: false,
+      loadError: '',
       query: {
         keyword: ''
       },
@@ -85,8 +104,21 @@ export default {
       rules: {
         name: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
         password: [
-          { required: true, message: '请输入密码', trigger: 'blur' },
-          { min: 6, max: 12, message: '密码 6 到 12 位', trigger: 'blur' }
+          {
+            // 修改时可以不填（表示不改密码），新增时必填
+            validator: (rule, value, callback) => {
+              if (!this.form.id && !value) {
+                callback(new Error('请输入密码'))
+                return
+              }
+              if (value && (value.length < 6 || value.length > 32)) {
+                callback(new Error('密码 6 到 32 位'))
+                return
+              }
+              callback()
+            },
+            trigger: 'blur'
+          }
         ]
       }
     }
@@ -106,7 +138,22 @@ export default {
       return this.filteredList.slice(start, start + this.size)
     }
   },
+  created() {
+    this.load()
+  },
   methods: {
+    async load() {
+      this.loading = true
+      this.loadError = ''
+      try {
+        this.list = await listUsers()
+      } catch (e) {
+        this.loadError = e.message
+        this.list = []
+      } finally {
+        this.loading = false
+      }
+    },
     handleQuery() {
       this.page = 1
     },
@@ -127,38 +174,47 @@ export default {
     },
     openEdit(row) {
       this.dialogTitle = '编辑用户'
-      this.form = JSON.parse(JSON.stringify(row))
+      this.form = { id: row.id, name: row.name, password: '', email: row.email }
       this.dialogVisible = true
       this.$nextTick(() => {
         this.$refs.userForm.clearValidate()
       })
     },
     submitForm() {
-      this.$refs.userForm.validate(valid => {
+      this.$refs.userForm.validate(async valid => {
         if (!valid) {
           return
         }
 
-        if (this.form.id) {
-          const index = this.list.findIndex(item => item.id === this.form.id)
-          this.list.splice(index, 1, JSON.parse(JSON.stringify(this.form)))
-          this.$message.success('修改成功')
-        } else {
-          const id = this.list.length ? this.list[this.list.length - 1].id + 1 : 1
-          const date = new Date().toISOString().slice(0, 10)
-          this.list.push(Object.assign({}, this.form, { id, date }))
-          this.$message.success('添加成功')
+        this.submitting = true
+        try {
+          if (this.form.id) {
+            await updateUser(this.form.id, this.form)
+            this.$message.success('修改成功')
+          } else {
+            await createUser(this.form)
+            this.$message.success('添加成功')
+          }
+          this.dialogVisible = false
+          await this.load()
+        } catch (e) {
+          this.$message.error(e.message)
+        } finally {
+          this.submitting = false
         }
-
-        this.dialogVisible = false
       })
     },
     handleDelete(row) {
       this.$confirm('确定要删除这个用户吗？', '提示', {
         type: 'warning'
-      }).then(() => {
-        this.list = this.list.filter(item => item.id !== row.id)
-        this.$message.success('删除成功')
+      }).then(async () => {
+        try {
+          await removeUser(row.id)
+          this.$message.success('删除成功')
+          await this.load()
+        } catch (e) {
+          this.$message.error(e.message)
+        }
       }).catch(() => {})
     }
   }
@@ -173,5 +229,9 @@ export default {
 .pager {
   margin-top: 16px;
   text-align: right;
+}
+
+.load-error {
+  margin-top: 16px;
 }
 </style>
