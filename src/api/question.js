@@ -1,13 +1,19 @@
 import request from './request'
+import {
+  state,
+  markOffline,
+  isOffline,
+  offlineQuestions,
+  addOfflineQuestion,
+  updateOfflineQuestion,
+  removeOfflineQuestion
+} from './fallback'
 
-// 后端的字段和页面用的字段不一样，转换集中放这里，视图里就不用关心接口长什么样。
-//
-// 后端（quiz-java）：{ id, category, content, optionA..optionD, answer, createdAt, options[] }
-// 页面：            { id, category, title, options[4], answer }
+export { isOffline }
 
-const LABELS = ['A', 'B', 'C', 'D']
-
-export function fromApi(q) {
+// 字段转换：后端是 content / optionA~D，页面用 title / options[]。
+// 转换只放在这里，视图不用关心接口长什么样。
+function fromApi(q) {
   return {
     id: q.id,
     category: q.category || '',
@@ -17,7 +23,7 @@ export function fromApi(q) {
   }
 }
 
-export function toApi(form) {
+function toApi(form) {
   const options = form.options || []
   return {
     id: form.id || undefined,
@@ -31,28 +37,72 @@ export function toApi(form) {
   }
 }
 
-export function labelsOf() {
+// 调真实接口；连不上就切离线演示数据，并把 offline 标记设上。
+// 业务错误（400）原样抛出，不当成离线。
+async function withFallback(apiFn, offlineFn) {
+  if (state.offline) {
+    return offlineFn()
+  }
+  try {
+    return await apiFn()
+  } catch (e) {
+    if (e.business) {
+      throw e
+    }
+    markOffline()
+    return offlineFn()
+  }
+}
+
+const LABELS = ['A', 'B', 'C', 'D']
+
+export function labels() {
   return LABELS.slice()
 }
 
-// 查询：后端支持 keyword / category 两个过滤条件
-export async function listQuestions(params = {}) {
-  const rows = await request.get('/questions', { params })
-  return rows.map(fromApi)
+export function listQuestions(params = {}) {
+  return withFallback(
+    async () => {
+      const rows = await request.get('/questions', { params })
+      return rows.map(fromApi)
+    },
+    () => {
+      const keyword = (params.keyword || '').trim().toLowerCase()
+      const rows = keyword
+        ? offlineQuestions.filter(item => item.title.toLowerCase().indexOf(keyword) !== -1)
+        : offlineQuestions
+      return rows.map(item => JSON.parse(JSON.stringify(item)))
+    }
+  )
 }
 
-export async function createQuestion(form) {
-  return fromApi(await request.post('/questions', toApi(form)))
+export function createQuestion(form) {
+  return withFallback(
+    async () => fromApi(await request.post('/questions', toApi(form))),
+    () => addOfflineQuestion(JSON.parse(JSON.stringify({
+      category: form.category,
+      title: form.title,
+      options: form.options,
+      answer: form.answer
+    })))
+  )
 }
 
-export async function updateQuestion(id, form) {
-  return fromApi(await request.put(`/questions/${id}`, toApi(form)))
+export function updateQuestion(id, form) {
+  return withFallback(
+    async () => fromApi(await request.put(`/questions/${id}`, toApi(form))),
+    () => updateOfflineQuestion(id, JSON.parse(JSON.stringify({
+      category: form.category,
+      title: form.title,
+      options: form.options,
+      answer: form.answer
+    })))
+  )
 }
 
-export async function removeQuestion(id) {
-  return request.delete(`/questions/${id}`)
-}
-
-export async function questionStats() {
-  return request.get('/questions/stats')
+export function removeQuestion(id) {
+  return withFallback(
+    () => request.delete(`/questions/${id}`),
+    () => removeOfflineQuestion(id)
+  )
 }

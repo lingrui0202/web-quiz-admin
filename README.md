@@ -27,7 +27,21 @@
 
 **跨域**用了两套办法，任选其一都行：dev 走 vue proxy（浏览器眼里同源）；后端 `CorsConfig` 也开了 CORS，供别的调用方式使用。
 
-**密码这块说明一下**：后端永远不返回密码（`passwordHash` 标了 `WRITE_ONLY`），所以列表页"密码"列显示的是「已加密」标签，不是没做完。编辑时密码留空表示不改密码。
+**密码这块说明一下**：后端永远不返回密码（`passwordHash` 标了 `WRITE_ONLY`），所以列表页"密码"列显示的是「已加密」标签，不是没做完。**新增用户要输两遍密码**，两次不一致会被表单拦住；编辑时密码留空表示不改密码。
+
+## 没有后端也能用（离线演示模式）
+
+`src/api/fallback.js` 里放了一份内存数据。**接口调不通时自动切过去**，页面顶部会出现一条蓝色提示条说明当前是离线模式，增删改都在内存里生效（刷新还原）。
+
+这样做的原因：线上是纯静态部署，没有后端；如果直接请求 `/api` 会 404，页面就变成空白、"新增"按钮点了也没反应。有了这层回退，老师打开链接就能把用户管理、题目管理的增删改查完整点一遍。
+
+判断规则在 `src/api/request.js`：后端有响应且是业务错误（4xx 且 `code:1`）就原样抛给页面；连不上、超时、404 都算离线，切回退数据。
+
+## 用真实接口的完整链路
+
+```
+浏览器 → :8080 (vue dev server) → /api 代理 → :8081 (quiz-java) → MySQL quiz_db
+```
 
 ## 怎么跑
 
@@ -47,16 +61,24 @@ npm run serve   # http://localhost:8080 ，/api 自动代理到 8081
 npm run build   # 生成 dist
 ```
 
-后端没起来的话，页面顶部会出现红色提示条「连不上后端：...」，不会白屏。
+后端没起来也能开发：页面会自动进入离线演示模式，顶部有蓝色提示条。
 
 ## 部署
 
-### 为什么线上版本还是"本地数组"版
+线上 <https://web-quiz-admin.vercel.app> 部署的是 `web-quiz-admin-dist` 仓库（只放编译产物，不含源码）。
 
-线上 <https://web-quiz-admin.vercel.app> 部署的是 `web-quiz-admin-dist`，那是**没有后端**的静态版——如果现在重新 build 推上去，页面会去请求 `/api/questions`，Vercel 上没有后端，直接 404。
+### 现在的流程
 
-所以要等后端也部署到公网（比如同一台 Vercel 上的 Serverless，或别的云主机），再把 `src/api/request.js` 里的 `baseURL` 改成后端公网地址，重新 build 推到 `-dist` 仓库。
+```bash
+npm run build                          # 生成 dist
+# 把 dist 内容同步到 web-quiz-admin-dist 仓库后提交推送，Vercel 会自动重新部署
+```
 
-### 现在的部署方式
+Framework Preset 选 **Other**，不需要构建命令（产物仓库里已经是编译好的文件）。
 
-Framework Preset 选 **Other**，Output Directory 填 `dist`，不需要构建命令（产物仓库里已经是编译好的文件）。
+### 为什么静态站也能用
+
+因为接口调不通会自动切 `src/api/fallback.js` 里的内存数据（见上文「离线演示模式」）。等后端上了公网，把 `src/api/request.js` 的 `baseURL` 改成公网地址、重新 build 即可，页面逻辑不用动。
+
+> 坑：`npm run serve` 对有 lint 问题的代码只是 warning，但 `npm run build` 会直接失败。所以每次改完记得跑一次 build。
+

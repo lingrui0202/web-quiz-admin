@@ -1,30 +1,29 @@
 <template>
   <div>
     <el-alert
-      v-if="loadError"
-      :title="'连不上后端：' + loadError"
-      type="error"
+      v-if="offline"
+      title="当前是离线演示模式：没有连接后端，增删改只保存在内存里，刷新页面会还原"
+      type="info"
       :closable="false"
       show-icon
-      class="load-error">
-      <div>确认 <code>quiz-java</code> 已经在 8081 跑起来，并且 MySQL 已启动。</div>
+      class="tip">
     </el-alert>
 
     <el-form :inline="true" :model="query" class="query-form">
       <el-form-item label="题目">
-        <el-input v-model="query.keyword" placeholder="题目关键词" clearable @keyup.enter.native="handleQuery"></el-input>
+        <el-input v-model="query.keyword" placeholder="输入题干关键词" clearable @keyup.enter.native="handleQuery"></el-input>
       </el-form-item>
       <el-form-item>
-        <el-button type="success" icon="el-icon-search" @click="handleQuery">查询题目</el-button>
-        <el-button type="success" icon="el-icon-plus" @click="openAdd">添加题目</el-button>
+        <el-button type="primary" icon="el-icon-search" @click="handleQuery">查询</el-button>
+        <el-button type="success" icon="el-icon-plus" @click="openAdd">新增题目</el-button>
         <el-button icon="el-icon-refresh" @click="load">刷新</el-button>
       </el-form-item>
     </el-form>
 
-    <el-table v-loading="loading" :data="pagedList" border stripe>
+    <el-table v-loading="loading" :data="pagedList" border stripe empty-text="没有符合条件的题目">
       <el-table-column prop="id" label="序号" width="70"></el-table-column>
       <el-table-column prop="category" label="分类" width="130"></el-table-column>
-      <el-table-column prop="title" label="问题" min-width="240"></el-table-column>
+      <el-table-column prop="title" label="题干" min-width="240"></el-table-column>
       <el-table-column label="选项" min-width="220">
         <template slot-scope="scope">
           <div v-for="(item, index) in scope.row.options" :key="index">
@@ -35,7 +34,7 @@
       <el-table-column label="答案" width="70">
         <template slot-scope="scope">{{ labels[scope.row.answer] }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="160">
+      <el-table-column label="操作" width="150">
         <template slot-scope="scope">
           <el-button size="mini" @click="openEdit(scope.row)">编辑</el-button>
           <el-button type="danger" size="mini" @click="handleDelete(scope.row)">删除</el-button>
@@ -54,15 +53,21 @@
       :total="list.length">
     </el-pagination>
 
-    <el-dialog :title="dialogTitle" :visible.sync="dialogVisible" width="560px">
+    <el-dialog
+      :title="dialogTitle"
+      :visible.sync="dialogVisible"
+      width="600px"
+      top="8vh"
+      append-to-body
+      :close-on-click-modal="false">
       <el-form :model="form" :rules="rules" ref="questionForm" label-width="80px">
         <el-form-item label="分类" prop="category">
-          <el-select v-model="form.category" placeholder="选择分类">
+          <el-select v-model="form.category" placeholder="请选择分类" style="width: 100%">
             <el-option v-for="c in categories" :key="c" :label="c" :value="c"></el-option>
           </el-select>
         </el-form-item>
-        <el-form-item label="问题" prop="title">
-          <el-input v-model="form.title" placeholder="请输入问题"></el-input>
+        <el-form-item label="题干" prop="title">
+          <el-input v-model="form.title" type="textarea" :rows="2" placeholder="请输入题干"></el-input>
         </el-form-item>
         <el-form-item
           v-for="(item, index) in form.options"
@@ -70,9 +75,9 @@
           :label="'选项' + labels[index]"
           :prop="'options.' + index"
           :rules="{ required: true, message: '选项不能为空', trigger: 'blur' }">
-          <el-input v-model="form.options[index]"></el-input>
+          <el-input v-model="form.options[index]" :placeholder="'选项 ' + labels[index]"></el-input>
         </el-form-item>
-        <el-form-item label="答案">
+        <el-form-item label="正确答案" prop="answer">
           <el-radio-group v-model="form.answer">
             <el-radio v-for="(item, index) in labels" :key="item" :label="index">{{ item }}</el-radio>
           </el-radio-group>
@@ -93,7 +98,8 @@ import {
   createQuestion,
   updateQuestion,
   removeQuestion,
-  labelsOf
+  labels,
+  isOffline
 } from '@/api/question'
 
 function emptyForm() {
@@ -110,29 +116,27 @@ export default {
   name: 'QuestionView',
   data() {
     return {
-      labels: labelsOf(),
+      labels: labels(),
       categories: ['HTML BASICS', 'CSS BASICS', 'JAVASCRIPT', 'VUE'],
-      // 数据来自 quiz-java 的 /api/questions，不再是本地数组
       list: [],
+      offline: false,
       loading: false,
       submitting: false,
-      loadError: '',
       query: {
         keyword: ''
       },
       page: 1,
       size: 5,
       dialogVisible: false,
-      dialogTitle: '添加题目',
+      dialogTitle: '新增题目',
       form: emptyForm(),
       rules: {
         category: [{ required: true, message: '请选择分类', trigger: 'change' }],
-        title: [{ required: true, message: '请输入问题', trigger: 'blur' }]
+        title: [{ required: true, message: '请输入题干', trigger: 'blur' }]
       }
     }
   },
   computed: {
-    // 分页在前端做；过滤交给后端（keyword 会走 MyBatis 的动态 SQL）
     pagedList() {
       const start = (this.page - 1) * this.size
       return this.list.slice(start, start + this.size)
@@ -144,14 +148,14 @@ export default {
   methods: {
     async load() {
       this.loading = true
-      this.loadError = ''
       try {
         const keyword = this.query.keyword.trim()
         this.list = await listQuestions(keyword ? { keyword } : {})
       } catch (e) {
-        this.loadError = e.message
+        this.$message.error(e.message)
         this.list = []
       } finally {
+        this.offline = isOffline()
         this.loading = false
       }
     },
@@ -167,7 +171,7 @@ export default {
       this.page = val
     },
     openAdd() {
-      this.dialogTitle = '添加题目'
+      this.dialogTitle = '新增题目'
       this.form = emptyForm()
       this.dialogVisible = true
       this.$nextTick(() => {
@@ -176,7 +180,7 @@ export default {
     },
     openEdit(row) {
       this.dialogTitle = '编辑题目'
-      // 拷贝一份，避免改到一半表格里的数据跟着变
+      // 拷贝一份，避免改到一半表格跟着变
       this.form = JSON.parse(JSON.stringify(row))
       this.dialogVisible = true
       this.$nextTick(() => {
@@ -196,7 +200,7 @@ export default {
             this.$message.success('修改成功')
           } else {
             await createQuestion(this.form)
-            this.$message.success('添加成功')
+            this.$message.success('新增成功')
           }
           this.dialogVisible = false
           await this.load()
@@ -208,7 +212,7 @@ export default {
       })
     },
     handleDelete(row) {
-      this.$confirm('确定要删除这道题目吗？', '提示', {
+      this.$confirm('确定删除这道题目吗？', '提示', {
         type: 'warning'
       }).then(async () => {
         try {
@@ -225,6 +229,10 @@ export default {
 </script>
 
 <style scoped>
+.tip {
+  margin-top: 16px;
+}
+
 .query-form {
   padding-top: 18px;
 }
@@ -232,9 +240,5 @@ export default {
 .pager {
   margin-top: 16px;
   text-align: right;
-}
-
-.load-error {
-  margin-top: 16px;
 }
 </style>

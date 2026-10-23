@@ -1,8 +1,8 @@
 <template>
   <el-container class="layout">
     <el-header class="layout-header">
-      <i class="el-icon-message"></i>
-      系统信息管理
+      <span class="brand">Quiz 答题后台</span>
+      <span class="brand-sub">用户与题库管理</span>
     </el-header>
 
     <el-container>
@@ -49,9 +49,21 @@ body {
 
 .layout-header {
   background-color: #eef1e6;
+  display: flex;
+  align-items: baseline;
+  padding: 0 24px;
+}
+
+.brand {
   font-size: 22px;
-  line-height: 60px;
   font-weight: bold;
+  line-height: 60px;
+}
+
+.brand-sub {
+  margin-left: 12px;
+  font-size: 13px;
+  color: #7a828c;
 }
 
 .layout-aside {

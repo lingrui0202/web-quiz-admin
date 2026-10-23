@@ -1,9 +1,18 @@
 import request from './request'
+import {
+  state,
+  markOffline,
+  isOffline,
+  offlineUsers,
+  addOfflineUser,
+  updateOfflineUser,
+  removeOfflineUser
+} from './fallback'
 
-// 后端（quiz-java）：{ id, username, email, createdAt }，永远不含密码
-// 页面：            { id, name, email, date }
+export { isOffline }
 
-export function fromApi(u) {
+// 后端是 username，页面用 name。密码只往上传，从不往下读。
+function fromApi(u) {
   return {
     id: u.id,
     name: u.username,
@@ -12,29 +21,55 @@ export function fromApi(u) {
   }
 }
 
-export async function listUsers() {
-  const rows = await request.get('/users')
-  return rows.map(fromApi)
+async function withFallback(apiFn, offlineFn) {
+  if (state.offline) {
+    return offlineFn()
+  }
+  try {
+    return await apiFn()
+  } catch (e) {
+    if (e.business) {
+      throw e
+    }
+    markOffline()
+    return offlineFn()
+  }
+}
+
+export function listUsers() {
+  return withFallback(
+    async () => (await request.get('/users')).map(fromApi),
+    () => offlineUsers.map(item => Object.assign({}, item))
+  )
 }
 
 // 新增要带密码，后端会转成摘要后入库
-export async function createUser(form) {
-  return fromApi(await request.post('/users', {
-    username: form.name,
-    passwordHash: form.password,
-    email: form.email
-  }))
+export function createUser(form) {
+  return withFallback(
+    async () => fromApi(await request.post('/users', {
+      username: form.name,
+      passwordHash: form.password,
+      email: form.email
+    })),
+    () => addOfflineUser({ name: form.name, email: form.email })
+  )
 }
 
-// 修改时密码留空表示不改（后端会保留原摘要）
-export async function updateUser(id, form) {
-  return fromApi(await request.put(`/users/${id}`, {
-    username: form.name,
-    passwordHash: form.password || '',
-    email: form.email
-  }))
+// 修改时密码留空表示不改密码（后端保留原摘要）
+export function updateUser(id, form) {
+  return withFallback(
+    async () => fromApi(await request.put(`/users/${id}`, {
+      username: form.name,
+      passwordHash: form.password || '',
+      email: form.email
+    })),
+    () => updateOfflineUser(id, { name: form.name, email: form.email })
+  )
 }
 
-export async function removeUser(id) {
-  return request.delete(`/users/${id}`)
+export function removeUser(id) {
+  return withFallback(
+    () => request.delete(`/users/${id}`),
+    () => removeOfflineUser(id)
+  )
 }
