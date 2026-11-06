@@ -60,6 +60,31 @@ export function labels() {
   return LABELS.slice()
 }
 
+// 分页查询：后端返回 { total, list }，离线模式下用本地数组切片模拟
+export function pageQuestions({ page = 1, pageSize = 5, keyword = '' } = {}) {
+  return withFallback(
+    async () => {
+      const params = { page, pageSize }
+      if (keyword) {
+        params.keyword = keyword
+      }
+      const data = await request.get('/questions/page', { params })
+      return { total: data.total, list: data.list.map(fromApi) }
+    },
+    () => {
+      const kw = keyword.trim().toLowerCase()
+      const filtered = kw
+        ? offlineQuestions.filter(item => item.title.toLowerCase().indexOf(kw) !== -1)
+        : offlineQuestions
+      const start = (page - 1) * pageSize
+      return {
+        total: filtered.length,
+        list: filtered.slice(start, start + pageSize).map(item => JSON.parse(JSON.stringify(item)))
+      }
+    }
+  )
+}
+
 export function listQuestions(params = {}) {
   return withFallback(
     async () => {

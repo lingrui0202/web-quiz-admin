@@ -20,7 +20,7 @@
       </el-form-item>
     </el-form>
 
-    <el-table v-loading="loading" :data="pagedList" border stripe empty-text="没有符合条件的题目">
+    <el-table v-loading="loading" :data="tableData" border stripe empty-text="没有符合条件的题目">
       <el-table-column prop="id" label="序号" width="70"></el-table-column>
       <el-table-column prop="category" label="分类" width="130"></el-table-column>
       <el-table-column prop="title" label="题干" min-width="240"></el-table-column>
@@ -44,13 +44,14 @@
 
     <el-pagination
       class="pager"
+      background
       @size-change="handleSizeChange"
-      @current-change="handleCurrentChange"
-      :current-page="page"
+      @current-change="handlePageChange"
+      :current-page="currentPage"
       :page-sizes="[5, 10, 20]"
-      :page-size="size"
+      :page-size="pageSize"
       layout="total, sizes, prev, pager, next"
-      :total="list.length">
+      :total="total">
     </el-pagination>
 
     <el-dialog
@@ -94,7 +95,7 @@
 
 <script>
 import {
-  listQuestions,
+  pageQuestions,
   createQuestion,
   updateQuestion,
   removeQuestion,
@@ -118,15 +119,17 @@ export default {
     return {
       labels: labels(),
       categories: ['HTML BASICS', 'CSS BASICS', 'JAVASCRIPT', 'VUE'],
-      list: [],
+      // 服务端分页：表里只有当前页这几条，总数单独拿
+      tableData: [],
       offline: false,
       loading: false,
       submitting: false,
       query: {
         keyword: ''
       },
-      page: 1,
-      size: 5,
+      currentPage: 1,
+      pageSize: 5,
+      total: 0,
       dialogVisible: false,
       dialogTitle: '新增题目',
       form: emptyForm(),
@@ -136,39 +139,51 @@ export default {
       }
     }
   },
-  computed: {
-    pagedList() {
-      const start = (this.page - 1) * this.size
-      return this.list.slice(start, start + this.size)
-    }
-  },
   created() {
-    this.load()
+    this.loadPage()
   },
   methods: {
-    async load() {
+    async loadPage() {
       this.loading = true
       try {
         const keyword = this.query.keyword.trim()
-        this.list = await listQuestions(keyword ? { keyword } : {})
+        const result = await pageQuestions({
+          page: this.currentPage,
+          pageSize: this.pageSize,
+          keyword
+        })
+        this.total = result.total
+
+        // 删掉最后一页最后一条后，页码会越界，往回退一页再取
+        if (result.list.length === 0 && this.currentPage > 1 && this.total > 0) {
+          this.currentPage = Math.max(1, Math.ceil(this.total / this.pageSize))
+          this.loading = false
+          return this.loadPage()
+        }
+
+        this.tableData = result.list
       } catch (e) {
         this.$message.error(e.message)
-        this.list = []
+        this.tableData = []
+        this.total = 0
       } finally {
         this.offline = isOffline()
         this.loading = false
       }
     },
+    handlePageChange(page) {
+      this.currentPage = page
+      this.loadPage()
+    },
+    handleSizeChange(size) {
+      this.pageSize = size
+      this.currentPage = 1
+      this.loadPage()
+    },
     handleQuery() {
-      this.page = 1
-      this.load()
-    },
-    handleSizeChange(val) {
-      this.size = val
-      this.page = 1
-    },
-    handleCurrentChange(val) {
-      this.page = val
+      // 查询时回到第一页，否则关键字变了页码还停在旧位置会很怪
+      this.currentPage = 1
+      this.loadPage()
     },
     openAdd() {
       this.dialogTitle = '新增题目'
@@ -180,7 +195,6 @@ export default {
     },
     openEdit(row) {
       this.dialogTitle = '编辑题目'
-      // 拷贝一份，避免改到一半表格跟着变
       this.form = JSON.parse(JSON.stringify(row))
       this.dialogVisible = true
       this.$nextTick(() => {
@@ -203,7 +217,7 @@ export default {
             this.$message.success('新增成功')
           }
           this.dialogVisible = false
-          await this.load()
+          await this.loadPage()
         } catch (e) {
           this.$message.error(e.message)
         } finally {
@@ -218,7 +232,7 @@ export default {
         try {
           await removeQuestion(row.id)
           this.$message.success('删除成功')
-          await this.load()
+          await this.loadPage()
         } catch (e) {
           this.$message.error(e.message)
         }
